@@ -1,0 +1,89 @@
+name: Build and Security Scan
+
+on:
+  push:
+    branches: [ 'main' ]
+    paths:
+      - 'result/**'
+      - '.github/workflows/build-and-scan.yaml'
+  pull_request:
+    branches: [ 'main' ]
+    paths:
+      - 'result/**'
+      - '.github/workflows/build-and-scan.yaml'
+  workflow_dispatch:
+
+jobs:
+  build-and-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
+    
+    steps:
+      # Checkout code
+      - uses: actions/checkout@v3
+      
+      # Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      # Build image but don't push yet
+      - name: Build image for testing
+        uses: docker/build-push-action@v4
+        with:
+          context: result
+          load: true  # Load the image locally instead of pushing
+          tags: result:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      # Set up Snyk and scan the image
+      - name: Set up Snyk
+        uses: snyk/actions/setup@master
+      
+      - name: Scan Docker image for vulnerabilities
+        run: |
+          # The "|| exit 1" ensures the workflow fails if Snyk finds vulnerabilities
+          # Remove the "|| exit 1" if you want the workflow to continue even with vulnerabilities
+          snyk container test result:test --severity-threshold=high || exit 1
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      
+      # Only if Snyk scan passes, login to registries
+      - name: Login to DockerHub
+        if: success()
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      # Build and push the final image
+      - name: Build and push
+        if: success()
+        uses: docker/build-push-action@v4
+        with:
+          context: result
+          push: true
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          tags: |
+            giuliogchillipharm/example-voting-app-result:latest
+            giuliogchillipharm/example-voting-app-result:${{ github.sha }}
+          cache-from: type=gha
+      
+      # Notify on failure or success (you can customize this)
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const issue_number = context.issue.number;
+            if (issue_number) {
+              github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue_number,
+                body: '❌ Security scan failed! Please fix the vulnerabilities before merging.'
+              });
+            }
