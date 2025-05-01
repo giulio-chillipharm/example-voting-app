@@ -1,4 +1,4 @@
-name: Build and Security Scan
+name: Build and Snyk Security Scan
 
 on:
   push:
