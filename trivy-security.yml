@@ -1,0 +1,59 @@
+name: Trivy Security Scan
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  trivy-code-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Run Trivy vulnerability scanner in fs mode
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+  trivy-container-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Compose
+        run: docker compose up -d
+
+      - name: Get container images
+        id: get-images
+        run: echo "images=$(docker compose images -q | tr '\n' ' ')" >> $GITHUB_OUTPUT
+
+      - name: Run Trivy vulnerability scanner for each image
+        run: |
+          for IMAGE in ${{ steps.get-images.outputs.images }}; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image $IMAGE
+          done
+
+  trivy-iac-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Run Trivy vulnerability scanner in config mode
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: './k8s-specifications'
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
