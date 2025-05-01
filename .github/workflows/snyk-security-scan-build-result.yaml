@@ -5,12 +5,12 @@ on:
     branches: [ 'main' ]
     paths:
       - 'result/**'
-      - '.github/workflows/security-scan-build-result.yaml'
+      - '.github/workflows/snyk-security-scan-build-result.yaml'
   pull_request:
     branches: [ 'main' ]
     paths:
       - 'result/**'
-      - '.github/workflows/security-scan-build-result.yaml'
+      - '.github/workflows/snyk-security-scan-build-result.yaml'
   workflow_dispatch:
 
 jobs:
